@@ -1,0 +1,13 @@
+services:
+  # Backend Service
+  - type: web
+    name: birst-conference-bot
+    runtime: python
+    rootDir: ConferenceBot
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false  # You will enter this in the Render dashboard manually
+      - key: PYTHON_VERSION
+        value: 3.11.0

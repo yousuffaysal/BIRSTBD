@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI(title="Research Tools Dashboard")
+# Trigger reload for new dependencies
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -29,6 +30,9 @@ BOTS = [
     {"id": "citation",   "name": "Citation Formatter"},
     {"id": "idea",       "name": "Idea Generator"},
     {"id": "conference", "name": "Conference Profile Bot"},
+    {"id": "questionaire", "name": "Questionnaire Designer"},
+    {"id": "sample_size", "name": "Sample Size Calculator"},
+    {"id": "statistical", "name": "Statistical Test Selector"},
     {"id": "reviewer",   "name": "Paper Reviewer"},
     {"id": "analyst",    "name": "Paper Analyst"},
     {"id": "writer",     "name": "Paper Writer Agent"},
@@ -71,6 +75,50 @@ def run_bot_logic(bot_id: str, **kwargs) -> tuple[str | None, str | None]:
             from src.paper_writerBot.agent import paper_writer
             text = kwargs.get("input_text", "").strip()
             return paper_writer(text), None
+
+        elif bot_id == "questionaire":
+            from src.Questioniare.question import generate_questionnaire
+            example_input = {
+                "variables": kwargs.get("variables") or "",
+                "population": kwargs.get("population") or "",
+                "culture": kwargs.get("culture") or "",
+                "language": kwargs.get("language") or "English",
+                "scale": kwargs.get("scale") or "5",
+                "domain": kwargs.get("domain") or ""
+            }
+            return generate_questionnaire(example_input), None
+
+        elif bot_id == "sample_size":
+            from src.sample_sizeBot.sample_size import SampleSizeBot
+            bot = SampleSizeBot()
+            mode = kwargs.get("mode") or "prevalence"
+            if mode == "prevalence":
+                p = float(kwargs.get("p") or 0.5)
+                d = float(kwargs.get("d") or 0.05)
+                pop = kwargs.get("population")
+                pop = int(pop) if pop else None
+                return f"Recommended sample size: {bot.prevalence(p=p, d=d, population=pop)}", None
+            elif mode == "mean":
+                sd = float(kwargs.get("std_dev") or 1.0)
+                d = float(kwargs.get("d") or 1.0)
+                return f"Recommended sample size: {bot.mean_estimation(std_dev=sd, d=d)}", None
+            elif mode == "regression":
+                predictors = int(kwargs.get("predictors") or 3)
+                return f"Recommended sample size (rule of thumb): {bot.regression(predictors=predictors)}", None
+
+        elif bot_id == "statistical":
+            from src.Statistical_test_selector.stat import StatisticalTestSelectorBot
+            selector = StatisticalTestSelectorBot()
+            iv = kwargs.get("iv_type") or "categorical"
+            dv = kwargs.get("dv_type") or "continuous"
+            groups = kwargs.get("groups")
+            try:
+                groups = int(groups) if groups else None
+            except Exception:
+                groups = None
+            test = selector.select_test(iv_type=iv, dv_type=dv, groups=groups)
+            assumptions = selector.assumptions(test)
+            return f"Recommended test: {test}\nAssumptions:\n- " + "\n- ".join(assumptions), None
 
         elif bot_id == "reviewer":
             from src.paperReviewerBot.bot import paper_reviewer_rag
@@ -149,6 +197,22 @@ async def execute_bot(
     pdf_path = form.get('pdf_path') or pdf_path
     question = form.get('question') or question
 
+    # Extract additional form fields used by newly added bots
+    population = form.get('population') or None
+    p = form.get('p') or None
+    d = form.get('d') or None
+    std_dev = form.get('std_dev') or None
+    predictors = form.get('predictors') or None
+    mode = form.get('mode') or None
+    iv_type = form.get('iv_type') or None
+    dv_type = form.get('dv_type') or None
+    groups = form.get('groups') or None
+    variables = form.get('variables') or None
+    culture = form.get('culture') or None
+    language = form.get('language') or None
+    scale = form.get('scale') or None
+    domain = form.get('domain') or None
+
     last_values = {
         "bibtex": bibtex,
         "style": style,
@@ -161,6 +225,20 @@ async def execute_bot(
         "paper_text": paper_text,
         "pdf_path": pdf_path,
         "input_text": input_text,
+        "population": population,
+        "p": p,
+        "d": d,
+        "std_dev": std_dev,
+        "predictors": predictors,
+        "mode": mode,
+        "iv_type": iv_type,
+        "dv_type": dv_type,
+        "groups": groups,
+        "variables": variables,
+        "culture": culture,
+        "language": language,
+        "scale": scale,
+        "domain": domain,
     }
 
     # If PDF / document provided but no question, build an index and/or run automatic analysis
@@ -216,7 +294,21 @@ async def execute_bot(
         target_venue=target_venue,
         paper_text=paper_text,
         pdf_path=pdf_path,
-        input_text=input_text
+        input_text=input_text,
+        population=population,
+        p=p,
+        d=d,
+        std_dev=std_dev,
+        predictors=predictors,
+        mode=mode,
+        iv_type=iv_type,
+        dv_type=dv_type,
+        groups=groups,
+        variables=variables,
+        culture=culture,
+        language=language,
+        scale=scale,
+        domain=domain
     )
 
     # Check for JSON request (from React Frontend)
@@ -254,6 +346,21 @@ async def stream_bot(request: Request, bot_id: str):
     paper_text = form.get('paper_text')
     pdf_path = form.get('pdf_path')
     input_text = form.get('input_text')
+    # additional fields for sample size / questionnaire / statistical bots
+    population = form.get('population')
+    p = form.get('p')
+    d = form.get('d')
+    std_dev = form.get('std_dev')
+    predictors = form.get('predictors')
+    mode = form.get('mode')
+    iv_type = form.get('iv_type')
+    dv_type = form.get('dv_type')
+    groups = form.get('groups')
+    variables = form.get('variables')
+    culture = form.get('culture')
+    language = form.get('language')
+    scale = form.get('scale')
+    domain = form.get('domain')
 
     # Handle uploaded file if provided
     uploaded = form.get('pdf_file')
@@ -320,7 +427,21 @@ async def stream_bot(request: Request, bot_id: str):
         target_venue=target_venue,
         paper_text=paper_text,
         pdf_path=pdf_path,
-        input_text=input_text
+        input_text=input_text,
+        population=population,
+        p=p,
+        d=d,
+        std_dev=std_dev,
+        predictors=predictors,
+        mode=mode,
+        iv_type=iv_type,
+        dv_type=dv_type,
+        groups=groups,
+        variables=variables,
+        culture=culture,
+        language=language,
+        scale=scale,
+        domain=domain
     )
 
     # Post-process formatting for nicer UI output

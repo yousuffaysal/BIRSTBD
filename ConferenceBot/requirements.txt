@@ -25,3 +25,4 @@ langchain
 bibtexparser
 crewai
 sentence-transformers
+scipy
